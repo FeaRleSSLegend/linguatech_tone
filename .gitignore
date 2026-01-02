@@ -1,0 +1,44 @@
+# Environment
+.env
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# Model files (too large for git)
+models/**/*.safetensors
+models/**/*.bin
+models/**/*.onnx
+*.pth
+*.pt
+
+# Data files
+data/*.csv
+data/*.json
+*.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+@"
+# Environment
+.env
+venv/
+__pycache__/
+
+# Model files (too large for GitHub)
+models/**/*.safetensors
+models/**/*.bin
+models/**/*.pth
+
+# Data files
+data/*.csv
+"@ | Out-File -FilePath .gitignore -Encoding utf8
