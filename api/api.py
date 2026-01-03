@@ -1,6 +1,7 @@
 """
 Digital Empathy Assistant API with Groq LLM
 Analyzes sentiment/toxicity and suggests better phrasing using AI
+Downloads model from HuggingFace on startup
 """
 
 from fastapi import FastAPI
@@ -11,9 +12,10 @@ from transformers import AutoTokenizer, AutoModel
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
+from huggingface_hub import hf_hub_download
 import os
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
 # DeBERTa model definition
@@ -31,33 +33,52 @@ class MultiTaskDeBERTa(nn.Module):
         pooled = self.dropout(pooled)
         return self.sentiment_classifier(pooled), self.toxicity_classifier(pooled)
 
-# Load DeBERTa model - path relative to this file
-# Assumes folder structure: project/api/api.py and project/models/final_deberta_multitask
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = "mutekiKazu/linguatech_tone"  # HuggingFace repo path
+# Download and load model from HuggingFace
+print("🔄 Downloading model from HuggingFace...")
+try:
+    # Download model file
+    model_path = hf_hub_download(
+        repo_id="mutekiKazu/linguatech_tone",
+        filename="model.safetensors",
+        cache_dir="./model_cache"
+    )
+    
+    # Get directory where all files are cached
+    MODEL_DIR = os.path.dirname(model_path)
+    
+    print(f"✅ Model downloaded to: {MODEL_DIR}")
+    
+    # Load tokenizer from HuggingFace
+    print("🔄 Loading tokenizer...")
+    tokenizer = AutoTokenizer.from_pretrained("mutekiKazu/linguatech_tone")
+    
+    # Initialize and load model
+    print("🔄 Loading model weights...")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = MultiTaskDeBERTa()
+    
+    from safetensors.torch import load_file
+    state_dict = load_file(model_path)
+    model.load_state_dict(state_dict)
+    
+    model.to(device)
+    model.eval()
+    
+    print(f"✅ Model loaded successfully!")
+    print(f"✅ Running on: {device}")
+    
+except Exception as e:
+    print(f"❌ Error loading model: {e}")
+    print("⚠️ API will start but predictions will fail")
+    tokenizer = None
+    model = None
+    device = None
 
-print("Loading DeBERTa model...")
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-model = MultiTaskDeBERTa()
-
-from safetensors.torch import load_file
-state_dict = load_file(f"{MODEL_PATH}/model.safetensors")
-model.load_state_dict(state_dict)
-
-model.to(device)
-model.eval()
-
-print(f"✅ DeBERTa model loaded from: {MODEL_PATH}")
-print(f"✅ Running on: {device}")
-
-# Initialize Groq LLM - API key loaded from .env file
-# Your .env file should contain: GROQ_API_KEY=your-key-here
+# Initialize Groq LLM
 try:
     llm = ChatGroq(
         model="llama-3.3-70b-versatile",
-        temperature=0.7,  # Controls creativity (0=deterministic, 1=creative)
+        temperature=0.7,
         max_tokens=150
     )
     print("✅ Groq LLM initialized")
@@ -110,7 +131,7 @@ app = FastAPI(
     description="AI-powered sentiment and toxicity analysis with intelligent rephrasing"
 )
 
-# Enable CORS for all origins (adjust for production)
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -118,15 +139,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Use Groq LLM to generate smart rephrase suggestions
+# Generate AI rephrase suggestions
 async def generate_llm_rephrase(text: str, sentiment_idx: int, toxicity_idx: int) -> dict:
-    """
-    Generates AI-powered rephrase suggestions based on toxicity/sentiment
+    """Generates AI-powered rephrase suggestions"""
     
-    Returns dict with 'suggestion' and 'reason' (or None if no rephrase needed)
-    """
-    
-    # Fallback if LLM not available
     if llm is None:
         return {"suggestion": None, "reason": "LLM not available"}
     
@@ -135,26 +151,26 @@ async def generate_llm_rephrase(text: str, sentiment_idx: int, toxicity_idx: int
         return {"suggestion": None, "reason": None}
     
     try:
-        # Select appropriate prompt based on severity
-        if toxicity_idx >= 2:  # Toxic or very toxic
+        # Select prompt based on severity
+        if toxicity_idx >= 2:
             prompt = REPHRASE_PROMPTS["toxic"]
             reason = "This message contains hurtful language"
-        elif toxicity_idx == 1:  # Mildly toxic
+        elif toxicity_idx == 1:
             prompt = REPHRASE_PROMPTS["mildly_toxic"]
             reason = "This message could be perceived as hostile"
-        elif sentiment_idx == 2:  # Negative but not toxic
+        elif sentiment_idx == 2:
             prompt = REPHRASE_PROMPTS["negative"]
             reason = "This message is quite negative"
         else:
             return {"suggestion": None, "reason": None}
         
-        # Generate rephrase using Groq
+        # Generate rephrase
         chain = prompt | llm
         response = await chain.ainvoke({"text": text})
         
         suggestion = response.content.strip()
         
-        # Clean up quotes that LLM might add
+        # Clean up quotes
         if suggestion.startswith('"') and suggestion.endswith('"'):
             suggestion = suggestion[1:-1]
         
@@ -162,13 +178,12 @@ async def generate_llm_rephrase(text: str, sentiment_idx: int, toxicity_idx: int
         
     except Exception as e:
         print(f"Error generating rephrase: {e}")
-        # Fallback suggestion
         return {
             "suggestion": "Consider rephrasing this more constructively.",
             "reason": "This message could be improved"
         }
 
-# Generate user-friendly feedback messages
+# Generate feedback messages
 def generate_feedback(sentiment_idx, toxicity_idx):
     if toxicity_idx >= 2:
         return "⚠️ This message may be hurtful. Consider rephrasing."
@@ -181,13 +196,14 @@ def generate_feedback(sentiment_idx, toxicity_idx):
     else:
         return "✅ Message looks good!"
 
-# Root endpoint - health check
+# Root endpoint
 @app.get("/")
 def home():
     return {
         "status": "running",
         "version": "2.0.0",
         "features": ["sentiment analysis", "toxicity detection", "AI-powered rephrasing"],
+        "model_loaded": model is not None,
         "llm_available": llm is not None,
         "endpoints": {
             "analyze": "POST /analyze",
@@ -195,25 +211,28 @@ def home():
         }
     }
 
-# Detailed health check
+# Health check
 @app.get("/health")
 def health():
     return {
-        "status": "healthy",
-        "deberta_loaded": True,
+        "status": "healthy" if model is not None else "degraded",
+        "model_loaded": model is not None,
         "llm_available": llm is not None,
-        "device": str(device)
+        "device": str(device) if device else "none"
     }
 
 # Main analysis endpoint
 @app.post("/analyze")
 async def analyze(data: dict):
     """
-    Analyzes text for sentiment/toxicity and provides AI rephrasing suggestions
+    Analyzes text for sentiment/toxicity and provides AI rephrasing
     
     Request: {"text": "your message here"}
-    Response: sentiment, toxicity, feedback, and rephrase suggestion
     """
+    
+    # Check if model is loaded
+    if model is None or tokenizer is None:
+        return {"error": "Model not loaded. Please check server logs."}
     
     # Validate input
     text = data.get("text", "").strip()
@@ -224,86 +243,86 @@ async def analyze(data: dict):
     if len(text) > 500:
         return {"error": "Text too long (max 500 characters)"}
     
-    # Tokenize text for model
-    inputs = tokenizer(
-        text, 
-        return_tensors='pt', 
-        padding=True, 
-        truncation=True, 
-        max_length=128
-    ).to(device)
-    
-    # Run prediction
-    with torch.no_grad():
-        sentiment_logits, toxicity_logits = model(
-            inputs['input_ids'], 
-            inputs['attention_mask']
-        )
-    
-    # Convert logits to probabilities
-    sentiment_probs = torch.softmax(sentiment_logits, dim=1)[0].cpu().numpy()
-    toxicity_probs = torch.softmax(toxicity_logits, dim=1)[0].cpu().numpy()
-    
-    # Get sentiment prediction
-    sentiment_idx = int(sentiment_probs.argmax())
-    
-    # Get toxicity prediction with confidence thresholds
-    # Higher thresholds reduce false positives
-    if toxicity_probs[3] > 0.3:  # Very toxic threshold
-        toxicity_idx = 3
-    elif toxicity_probs[2] > 0.4:  # Toxic threshold
-        toxicity_idx = 2
-    elif toxicity_probs[1] > 0.35:  # Mildly toxic threshold
-        toxicity_idx = 1
-    else:
-        toxicity_idx = 0  # Non-toxic
-    
-    # Map indices to labels
-    sentiment_labels = ['positive', 'neutral', 'negative']
-    toxicity_labels = ['non-toxic', 'mildly toxic', 'toxic', 'very toxic']
-    
-    sentiment_label = sentiment_labels[sentiment_idx]
-    toxicity_label = toxicity_labels[toxicity_idx]
-    
-    # Generate feedback message
-    feedback = generate_feedback(sentiment_idx, toxicity_idx)
-    
-    # Generate AI rephrase suggestion (uses Groq API)
-    rephrase_result = await generate_llm_rephrase(text, sentiment_idx, toxicity_idx)
-    
-    # Build response
-    response = {
-        "text": text,
-        "sentiment": {
-            "label": sentiment_label,
-            "confidence": float(sentiment_probs[sentiment_idx]),
-            "scores": {
-                sentiment_labels[i]: float(sentiment_probs[i]) 
-                for i in range(3)
-            }
-        },
-        "toxicity": {
-            "label": toxicity_label,
-            "confidence": float(toxicity_probs[toxicity_idx]),
-            "scores": {
-                toxicity_labels[i]: float(toxicity_probs[i]) 
-                for i in range(4)
-            }
-        },
-        "feedback": feedback,
-        "should_warn": toxicity_idx >= 2,
-        "rephrase": rephrase_result
-    }
-    
-    return response
+    try:
+        # Tokenize
+        inputs = tokenizer(
+            text, 
+            return_tensors='pt', 
+            padding=True, 
+            truncation=True, 
+            max_length=128
+        ).to(device)
+        
+        # Predict
+        with torch.no_grad():
+            sentiment_logits, toxicity_logits = model(
+                inputs['input_ids'], 
+                inputs['attention_mask']
+            )
+        
+        # Convert to probabilities
+        sentiment_probs = torch.softmax(sentiment_logits, dim=1)[0].cpu().numpy()
+        toxicity_probs = torch.softmax(toxicity_logits, dim=1)[0].cpu().numpy()
+        
+        # Get predictions
+        sentiment_idx = int(sentiment_probs.argmax())
+        
+        # Toxicity with thresholds
+        if toxicity_probs[3] > 0.3:
+            toxicity_idx = 3
+        elif toxicity_probs[2] > 0.4:
+            toxicity_idx = 2
+        elif toxicity_probs[1] > 0.35:
+            toxicity_idx = 1
+        else:
+            toxicity_idx = 0
+        
+        # Labels
+        sentiment_labels = ['positive', 'neutral', 'negative']
+        toxicity_labels = ['non-toxic', 'mildly toxic', 'toxic', 'very toxic']
+        
+        sentiment_label = sentiment_labels[sentiment_idx]
+        toxicity_label = toxicity_labels[toxicity_idx]
+        
+        # Generate feedback
+        feedback = generate_feedback(sentiment_idx, toxicity_idx)
+        
+        # Generate rephrase suggestion
+        rephrase_result = await generate_llm_rephrase(text, sentiment_idx, toxicity_idx)
+        
+        # Build response
+        response = {
+            "text": text,
+            "sentiment": {
+                "label": sentiment_label,
+                "confidence": float(sentiment_probs[sentiment_idx]),
+                "scores": {
+                    sentiment_labels[i]: float(sentiment_probs[i]) 
+                    for i in range(3)
+                }
+            },
+            "toxicity": {
+                "label": toxicity_label,
+                "confidence": float(toxicity_probs[toxicity_idx]),
+                "scores": {
+                    toxicity_labels[i]: float(toxicity_probs[i]) 
+                    for i in range(4)
+                }
+            },
+            "feedback": feedback,
+            "should_warn": toxicity_idx >= 2,
+            "rephrase": rephrase_result
+        }
+        
+        return response
+        
+    except Exception as e:
+        return {"error": f"Analysis failed: {str(e)}"}
 
-# Batch analysis endpoint
+# Batch analysis
 @app.post("/batch-analyze")
 async def batch_analyze(data: dict):
-    """
-    Analyzes multiple texts at once
-    Request: {"texts": ["text1", "text2", "text3"]}
-    """
+    """Analyzes multiple texts at once"""
     
     texts = data.get("texts", [])
     
@@ -313,7 +332,6 @@ async def batch_analyze(data: dict):
     if len(texts) > 50:
         return {"error": "Maximum 50 texts per batch"}
     
-    # Process each text
     results = []
     for text in texts:
         try:
@@ -333,7 +351,6 @@ if __name__ == "__main__":
     print("\n🚀 Starting Digital Empathy Assistant API v2.0")
     print("📝 Features: Sentiment Analysis + Toxicity Detection + AI Rephrasing")
     
-    # Get port from environment (for production) or use 8000 (for local)
     port = int(os.getenv("PORT", 8000))
     
     print(f"🔗 Server running on port {port}")

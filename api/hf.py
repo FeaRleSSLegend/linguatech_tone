@@ -2,8 +2,8 @@
 from huggingface_hub import HfApi, create_repo
 
 # Replace with your HuggingFace username
-USERNAME = "mutekiKazu"  # e.g., "johnsmith"
-REPO_NAME = f"{USERNAME}/linguatech_tone"
+USERNAME = "your-username"  # e.g., "johnsmith"
+REPO_NAME = f"{USERNAME}/digital-empathy-assistant"
 
 # Create the repository
 api = HfApi()
