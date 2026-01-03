@@ -34,7 +34,7 @@ class MultiTaskDeBERTa(nn.Module):
 # Load DeBERTa model - path relative to this file
 # Assumes folder structure: project/api/api.py and project/models/final_deberta_multitask
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(SCRIPT_DIR, "../models/final_deberta_multitask")
+MODEL_PATH = "mutekiKazu/linguatech_tone"  # HuggingFace repo path
 
 print("Loading DeBERTa model...")
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
