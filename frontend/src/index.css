@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+/* ============================
+   Toxicity & Safety Filter
+   Custom Design System
+   ============================ */
+
+/* Custom color variables */
+:root {
+  --color-bg: #080808;
+  --color-btn: #2f3335;
+  --color-text-small: #958d73;
+  --color-text-main: #e0ddd9;
+
+  /* Unified Brand Color (Neon Green) */
+  --color-primary: #10b981; /* Emerald-500 base, but we'll make it glow */
+  --color-primary-glow: #34d399;
+  --color-primary-hover: #059669;
+  --color-neon: #00ff88; /* The true Tone neon green */
+
+  --color-safe: var(--color-neon);
+  --color-warning: #fbbf24;
+  --color-toxic: #ff4d4d;
+}
+
+.glow-primary {
+  filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.4));
+}
+
+.text-glow-neon {
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+/* Global reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text-main);
+  min-height: 100vh;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Typography utilities */
+.text-main {
+  color: var(--color-text-main);
+}
+
+.text-small {
+  color: var(--color-text-small);
+}
+
+/* Button base styles */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--color-text-small);
+  outline-offset: 2px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-btn);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-small);
+}

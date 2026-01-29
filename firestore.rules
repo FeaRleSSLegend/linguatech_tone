@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function: Check if user is the document owner
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper function: Check if user is admin
+    function isAdmin() {
+      return isAuthenticated() &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'];
+    }
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      // Anyone authenticated can read user profiles
+      allow read: if isAuthenticated();
+
+      // Users can only write their own profile
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+
+      // Admins can update any user
+      allow update: if isAdmin();
+
+      // No one can delete users (soft delete with status field instead)
+      allow delete: if false;
+    }
+
+    // CHATS COLLECTION
+    match /chats/{chatId} {
+      // Simplified permissions: authenticated users can create, read, update chats
+      allow create, read, update: if isAuthenticated();
+
+      // Group creators and admins can update ban fields
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.creatorId ||
+        isAdmin()
+      );
+
+      // Only admins can delete chats
+      allow delete: if isAdmin();
+    }
+
+    // MESSAGES COLLECTION
+    match /messages/{messageId} {
+      // Simplified permissions: authenticated users can create and read messages
+      allow create, read: if isAuthenticated();
+
+      // Only sender or admin can update/delete messages
+      allow update: if isAuthenticated() && (
+                       request.auth.uid == resource.data.senderId ||
+                       isAdmin()
+                     );
+      allow delete: if isAuthenticated() && (
+                       request.auth.uid == resource.data.senderId ||
+                       isAdmin()
+                     );
+    }
+
+    // FRIEND REQUESTS COLLECTION
+    match /friend_requests/{requestId} {
+      // Users can read requests they sent or received
+      allow read: if isAuthenticated() && (
+                     request.auth.uid == resource.data.fromUserId ||
+                     request.auth.uid == resource.data.toUserId
+                   );
+
+      // Users can create friend requests
+      allow create: if isAuthenticated() &&
+                       request.auth.uid == request.resource.data.fromUserId &&
+                       request.resource.data.status == 'pending' &&
+                       request.resource.data.fromUserId != request.resource.data.toUserId;
+
+      // Only the recipient can accept/reject requests
+      allow update: if isAuthenticated() &&
+                       request.auth.uid == resource.data.toUserId &&
+                       resource.data.status == 'pending' &&
+                       request.resource.data.status in ['accepted', 'rejected'];
+
+      // Sender can delete their own pending requests
+      allow delete: if isAuthenticated() &&
+                       request.auth.uid == resource.data.fromUserId &&
+                       resource.data.status == 'pending';
+
+      // Admins can do anything
+      allow read, write: if isAdmin();
+    }
+
+    // REPORTS COLLECTION (Admin only)
+    match /reports/{reportId} {
+      // Only admins can read reports
+      allow read: if isAdmin();
+
+      // Anyone authenticated can create a report
+      allow create: if isAuthenticated();
+
+      // Only admins can update/delete reports
+      allow update, delete: if isAdmin();
+    }
+  }
+}

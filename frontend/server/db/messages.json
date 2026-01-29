@@ -1,0 +1,242 @@
+[
+  {
+    "id": "1769378407150",
+    "chatId": "1769378058763",
+    "text": "I have a different perspective on this. Let's talk.",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "safe",
+      "confidence": 0.1
+    },
+    "timestamp": "2026-01-25T22:00:07.150Z"
+  },
+  {
+    "id": "1769378627827",
+    "chatId": "1769378553725",
+    "text": "I'm feeling a bit frustrated. Can we check back later?",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "safe",
+      "confidence": 0.1
+    },
+    "timestamp": "2026-01-25T22:03:47.827Z"
+  },
+  {
+    "id": "1769378871358",
+    "chatId": "1769378553725",
+    "text": "stupid you",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "toxic",
+      "confidence": 0.99
+    },
+    "timestamp": "2026-01-25T22:07:51.358Z"
+  },
+  {
+    "id": "1769381100512",
+    "chatId": "1769378058763",
+    "text": "fuck you ",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "toxic",
+      "confidence": 0.99
+    },
+    "timestamp": "2026-01-25T22:45:00.512Z"
+  },
+  {
+    "id": "1769439861005",
+    "chatId": "1769378058763",
+    "text": "Good morning ",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "safe",
+      "confidence": 0
+    },
+    "timestamp": "2026-01-26T15:04:21.005Z"
+  },
+  {
+    "id": "1769439889838",
+    "chatId": "1769378058763",
+    "text": "Fuck you",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "toxic",
+      "confidence": 0.99
+    },
+    "timestamp": "2026-01-26T15:04:49.838Z"
+  },
+  {
+    "id": "1769446357562",
+    "chatId": "1769378058763",
+    "text": "I have a different perspective on this. Let's talk.",
+    "sender": {
+      "id": "1769441864439",
+      "name": "Lordradeez.exe",
+      "email": "veritasabuja69@gmail.com"
+    },
+    "analysis": {
+      "label": "safe",
+      "confidence": 0
+    },
+    "timestamp": "2026-01-26T16:52:37.562Z"
+  },
+  {
+    "id": "1769447188553",
+    "chatId": "1769447160648",
+    "text": "Hwfa",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "safe",
+      "confidence": 0
+    },
+    "timestamp": "2026-01-26T17:06:28.553Z"
+  },
+  {
+    "id": "1769447374723",
+    "chatId": "1769447160648",
+    "text": "Good evening Alice",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "safe",
+      "confidence": 0
+    },
+    "timestamp": "2026-01-26T17:09:34.723Z"
+  },
+  {
+    "id": "1769448018293",
+    "chatId": "1769443744106",
+    "text": "Hello",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "safe",
+      "confidence": 0
+    },
+    "timestamp": "2026-01-26T17:20:18.293Z"
+  },
+  {
+    "id": "1769448194859",
+    "chatId": "1769443744106",
+    "text": "fuck you",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "toxic",
+      "confidence": 0.9
+    },
+    "timestamp": "2026-01-26T17:23:14.859Z"
+  },
+  {
+    "id": "1769448247081",
+    "chatId": "1769443880545",
+    "text": "Good evening",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "safe",
+      "confidence": 0
+    },
+    "timestamp": "2026-01-26T17:24:07.081Z"
+  },
+  {
+    "id": "1769448259554",
+    "chatId": "1769446992752",
+    "text": "Fuck you",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "toxic",
+      "confidence": 0.9
+    },
+    "timestamp": "2026-01-26T17:24:19.554Z"
+  },
+  {
+    "id": "1769448443320",
+    "chatId": "1769446992752",
+    "text": "HIIIIII",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "safe",
+      "confidence": 0
+    },
+    "timestamp": "2026-01-26T17:27:23.320Z"
+  },
+  {
+    "id": "1769448462050",
+    "chatId": "1769446992752",
+    "text": "BITCH",
+    "sender": {
+      "id": "1769378042154",
+      "name": "Anointed Rademene Ekabua ",
+      "email": "lordradez362@gmail.com"
+    },
+    "analysis": {
+      "label": "toxic",
+      "confidence": 0.9
+    },
+    "timestamp": "2026-01-26T17:27:42.050Z"
+  },
+  {
+    "id": "1769530674909",
+    "chatId": "1769378058763",
+    "text": "I have a different perspective on this. Let's talk.",
+    "sender": {
+      "id": "1769530559265",
+      "name": "John Nathaniel",
+      "email": "johnpraisewzth@gmail.com"
+    },
+    "analysis": {
+      "label": "safe",
+      "confidence": 0
+    },
+    "timestamp": "2026-01-27T16:17:54.909Z"
+  }
+]

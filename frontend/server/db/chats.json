@@ -1,0 +1,64 @@
+[
+  {
+    "id": "1769378058763",
+    "name": "Alice Smith",
+    "type": "direct",
+    "online": true
+  },
+  {
+    "id": "1769378553725",
+    "name": "CSC 301",
+    "type": "group",
+    "online": true
+  },
+  {
+    "id": "1769443691926",
+    "name": "CSC 301",
+    "type": "group",
+    "online": true,
+    "admins": [
+      "1769378042154"
+    ],
+    "bans": []
+  },
+  {
+    "id": "1769443744106",
+    "name": "Bob Jones",
+    "type": "direct",
+    "online": true,
+    "admins": [
+      "1769378042154"
+    ],
+    "bans": []
+  },
+  {
+    "id": "1769443880545",
+    "name": "Alice Smith",
+    "type": "direct",
+    "online": true,
+    "admins": [
+      "1769443872221"
+    ],
+    "bans": []
+  },
+  {
+    "id": "1769446992752",
+    "name": "Alice Smith",
+    "type": "direct",
+    "online": true,
+    "admins": [
+      "1769378042154"
+    ],
+    "bans": []
+  },
+  {
+    "id": "1769447160648",
+    "name": "Alice Smith",
+    "type": "direct",
+    "online": true,
+    "admins": [
+      "1769378042154"
+    ],
+    "bans": []
+  }
+]

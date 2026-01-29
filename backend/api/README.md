@@ -1,0 +1,334 @@
+# 🤖 Digital Empathy Assistant API
+
+AI-powered sentiment and toxicity analysis with intelligent message rephrasing using DeBERTa and Groq LLM.
+
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115.5-green.svg)](https://fastapi.tiangolo.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## ✨ Features
+
+- **Sentiment Analysis**: Detects positive, neutral, or negative emotions
+- **Toxicity Detection**: Identifies toxic, mildly toxic, or non-toxic content
+- **AI-Powered Rephrasing**: Suggests better ways to phrase negative/toxic messages using Groq LLM
+- **Real-time Analysis**: Fast inference with optimized DeBERTa model
+- **Batch Processing**: Analyze multiple messages at once
+- **RESTful API**: Easy integration with any application
+
+## 🚀 Live Demo
+
+**API Base URL**: `https://your-app.up.railway.app`
+
+**Interactive Docs**: `https://your-app.up.railway.app/docs`
+
+## 📋 API Endpoints
+
+### 1. Analyze Single Message
+
+**Endpoint**: `POST /analyze`
+
+**Request**:
+```json
+{
+  "text": "You're so stupid, this is worthless!"
+}
+```
+
+**Response**:
+```json
+{
+  "text": "You're so stupid, this is worthless!",
+  "sentiment": {
+    "label": "negative",
+    "confidence": 0.92,
+    "scores": {
+      "positive": 0.02,
+      "neutral": 0.06,
+      "negative": 0.92
+    }
+  },
+  "toxicity": {
+    "label": "toxic",
+    "confidence": 0.88,
+    "scores": {
+      "non-toxic": 0.05,
+      "mildly toxic": 0.07,
+      "toxic": 0.88,
+      "very toxic": 0.00
+    }
+  },
+  "feedback": "⚠️ This message may be hurtful. Consider rephrasing.",
+  "should_warn": true,
+  "rephrase": {
+    "suggestion": "I'm confused about this approach. Could you help me understand your reasoning?",
+    "reason": "This message contains hurtful language"
+  }
+}
+```
+
+### 2. Batch Analysis
+
+**Endpoint**: `POST /batch-analyze`
+
+**Request**:
+```json
+{
+  "texts": [
+    "Great job on the presentation!",
+    "This is terrible work",
+    "Can we discuss this further?"
+  ]
+}
+```
+
+**Response**:
+```json
+{
+  "results": [
+    { /* result 1 */ },
+    { /* result 2 */ },
+    { /* result 3 */ }
+  ],
+  "total": 3
+}
+```
+
+### 3. Health Check
+
+**Endpoint**: `GET /health`
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "deberta_loaded": true,
+  "llm_available": true,
+  "device": "cpu"
+}
+```
+
+## 💻 Usage Examples
+
+### cURL
+```bash
+curl -X POST "https://your-app.up.railway.app/analyze" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "This is so annoying and dumb"}'
+```
+
+### Python
+```python
+import requests
+
+response = requests.post(
+    "https://your-app.up.railway.app/analyze",
+    json={"text": "This is so annoying and dumb"}
+)
+
+result = response.json()
+print(f"Sentiment: {result['sentiment']['label']}")
+print(f"Toxicity: {result['toxicity']['label']}")
+print(f"Suggestion: {result['rephrase']['suggestion']}")
+```
+
+### JavaScript (Fetch)
+```javascript
+fetch('https://your-app.up.railway.app/analyze', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ text: 'This is so annoying and dumb' })
+})
+  .then(res => res.json())
+  .then(data => {
+    console.log('Sentiment:', data.sentiment.label);
+    console.log('Toxicity:', data.toxicity.label);
+    console.log('Suggestion:', data.rephrase.suggestion);
+  });
+```
+
+### JavaScript (Axios)
+```javascript
+const axios = require('axios');
+
+axios.post('https://your-app.up.railway.app/analyze', {
+  text: 'This is so annoying and dumb'
+})
+  .then(response => {
+    console.log('Result:', response.data);
+  });
+```
+
+## 🛠️ Local Development
+
+### Prerequisites
+- Python 3.8+
+- pip
+- Virtual environment (recommended)
+
+### Installation
+
+1. **Clone the repository**
+```bash
+git clone https://github.com/YOUR-USERNAME/empathy-api.git
+cd empathy-api
+```
+
+2. **Create virtual environment**
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. **Install dependencies**
+```bash
+pip install -r api/requirements.txt
+```
+
+4. **Set up environment variables**
+
+Create `api/.env`:
+```bash
+GROQ_API_KEY=your-groq-api-key-here
+```
+
+Get your free Groq API key at: [console.groq.com](https://console.groq.com)
+
+5. **Download the model** (see Model Setup below)
+
+6. **Run the server**
+```bash
+cd api
+python api.py
+```
+
+Visit `http://localhost:8000/docs` for interactive API documentation.
+
+## 📦 Model Setup
+
+### Option 1: Download from Hugging Face (Recommended)
+```python
+# The model will auto-download from Hugging Face on first run
+# Make sure you have uploaded it to: https://huggingface.co/your-username/model-name
+```
+
+### Option 2: Local Model Files
+Place your trained model files in:
+```
+project/
+├── api/
+└── models/
+    └── final_deberta_multitask/
+        ├── model.safetensors
+        ├── config.json
+        ├── tokenizer_config.json
+        └── ... (other tokenizer files)
+```
+
+## 📊 Response Fields Explained
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | string | Original input text |
+| `sentiment.label` | string | `positive`, `neutral`, or `negative` |
+| `sentiment.confidence` | float | Confidence score (0-1) |
+| `toxicity.label` | string | `non-toxic`, `mildly toxic`, `toxic`, or `very toxic` |
+| `toxicity.confidence` | float | Confidence score (0-1) |
+| `feedback` | string | User-friendly message about the text |
+| `should_warn` | boolean | `true` if message is toxic/very toxic |
+| `rephrase.suggestion` | string/null | AI-generated alternative phrasing (null if not needed) |
+| `rephrase.reason` | string/null | Explanation for the suggestion |
+
+## ⚙️ Configuration
+
+### Toxicity Thresholds
+
+The API uses custom thresholds to reduce false positives:
+- **Very toxic**: probability > 0.3
+- **Toxic**: probability > 0.4
+- **Mildly toxic**: probability > 0.35
+
+These can be adjusted in `api/api.py` (search for "Get toxicity prediction").
+
+### LLM Settings
+
+Groq LLM configuration:
+- Model: `llama-3.3-70b-versatile`
+- Temperature: `0.7` (balance between creativity and consistency)
+- Max tokens: `150` (keeps suggestions concise)
+
+## 🚨 Rate Limits
+
+**Free Tier**:
+- Single analysis: No rate limit
+- Batch analysis: Maximum 50 texts per request
+
+**Groq API**: Follow Groq's rate limits (check your plan)
+
+## 🐛 Error Handling
+
+### Common Errors
+
+**Empty Text**:
+```json
+{"error": "Text cannot be empty"}
+```
+
+**Text Too Long**:
+```json
+{"error": "Text too long (max 500 characters)"}
+```
+
+**Batch Too Large**:
+```json
+{"error": "Maximum 50 texts per batch"}
+```
+
+## 🔒 Security Notes
+
+- API key is stored server-side only
+- Users don't need their own Groq API key
+- CORS enabled for all origins (restrict in production if needed)
+- No user data is logged or stored
+
+## 📈 Performance
+
+- **Average response time**: ~500ms (with LLM rephrasing)
+- **Without rephrasing**: ~100ms
+- **Batch processing**: ~50ms per text
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## 🙏 Acknowledgments
+
+- **DeBERTa** by Microsoft
+- **Groq** for fast LLM inference
+- **FastAPI** framework
+- **LangChain** for LLM orchestration
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/YOUR-USERNAME/empathy-api/issues)
+- **Documentation**: [API Docs](https://your-app.up.railway.app/docs)
+
+## 🗺️ Roadmap
+
+- [ ] Multi-language support
+- [ ] Emotion detection (anger, sadness, joy, etc.)
+- [ ] User authentication
+- [ ] Response caching
+- [ ] Webhook support
+- [ ] Custom model training API
+
+---
+
+Made by John Nathaniel of LinguaTech

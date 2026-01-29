@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(ls:*)",
+      "Bash(firebase deploy:*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

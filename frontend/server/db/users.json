@@ -1,0 +1,41 @@
+[
+  {
+    "id": "1769378042154",
+    "name": "Anointed Rademene Ekabua ",
+    "email": "lordradez362@gmail.com",
+    "password": "Anointed69##",
+    "role": "admin"
+  },
+  {
+    "id": "1769441685550",
+    "name": "Rademene ",
+    "email": "anointedrademeneekabua@gmail.com",
+    "password": "Anointed69##",
+    "role": "super_admin",
+    "status": "active"
+  },
+  {
+    "id": "1769441864439",
+    "name": "Lordradeez.exe",
+    "email": "veritasabuja69@gmail.com",
+    "password": "ADMIN_SECRET_2026",
+    "role": "super_admin",
+    "status": "active"
+  },
+  {
+    "id": "1769443872221",
+    "name": "John Nathaniel",
+    "email": "lordradeez.exe@gmail.com",
+    "password": "Anointed69##",
+    "role": "user",
+    "status": "active"
+  },
+  {
+    "id": "1769530559265",
+    "name": "John Nathaniel",
+    "email": "johnpraisewzth@gmail.com",
+    "password": "JLJ90081hh",
+    "role": "user",
+    "status": "active"
+  }
+]
