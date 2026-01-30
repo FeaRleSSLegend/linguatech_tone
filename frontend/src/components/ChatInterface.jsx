@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link } from 'react-router-dom';
+
 import {
     MessageSquare,
     ArrowLeft,
@@ -15,7 +15,8 @@ import {
     UserX,
     Trash2,
     Clock,
-    Ban
+    Ban,
+    ShieldOff
 } from 'lucide-react';
 
 import MessageBubble from './MessageBubble';
@@ -23,8 +24,10 @@ import SuggestionCard from './SuggestionCard';
 import { useAnalyze } from '../hooks/useAnalyze';
 import { useChat } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 
 export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
+    const { onlineUsers } = useSocket();
     const {
         messages,
         sendMessage,
@@ -32,11 +35,14 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
         chats,
         setActiveChatId,
         typingUsers,
+        blockUser,
+        unblockUser,
+        deleteChat,
         emitTyping
     } = useChat();
 
     const { user } = useAuth();
-
+    
     const [inputValue, setInputValue] = useState('');
     const [showSuggestion, setShowSuggestion] = useState(false);
     const [pendingMessage, setPendingMessage] = useState(null);
@@ -80,6 +86,7 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
         () => chats.find(c => c.id === activeChatId),
         [chats, activeChatId]
     );
+    
 
     /* -------------------- Toxic Message Count -------------------- */
     const toxicMessageCount = useMemo(() => {
@@ -107,6 +114,25 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
         const permBannedUsers = activeChat.permBannedUsers || [];
         return permBannedUsers.includes(user.id);
     }, [activeChat, user]);
+
+    /* -------------------- Block Status Check -------------------- */
+    const blockStatus = useMemo(() => {
+        if (!activeChat || !user || activeChat.type !== 'direct') {
+            return { isBlocked: false, iBlockedThem: false, theyBlockedMe: false };
+        }
+
+        const otherUserId = activeChat.participants?.find(id => id !== user.id);
+        const iBlockedThem = activeChat.blockedBy?.includes(user.id) || false;
+        const theyBlockedMe = activeChat.blockedBy?.includes(otherUserId) || false;
+
+        return {
+            isBlocked: iBlockedThem || theyBlockedMe,
+            iBlockedThem,
+            theyBlockedMe
+        };
+    }, [activeChat, user]);
+
+    const { isBlocked, iBlockedThem, theyBlockedMe } = blockStatus;
 
     /* -------------------- Messages (Search Optimized) -------------------- */
     const activeMessages = useMemo(() => {
@@ -144,19 +170,51 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
     }, [isActionsMenuOpen]);
 
     /* -------------------- Action Handlers -------------------- */
-    const handleBlockUser = () => {
-        if (confirm('Block this user? They will no longer be able to message you.')) {
-            // TODO: Implement block logic
-            alert('Block functionality coming soon');
-            setIsActionsMenuOpen(false);
+    const handleBlockUser = async () => {
+        if (!activeChat || activeChat.type !== 'direct') return;
+
+        // Determine the other user's ID in a direct chat
+        const otherUserId = activeChat.participants?.find(id => id !== user.id);
+
+        if (window.confirm(`Are you sure you want to block this user? You will no longer be able to send or receive messages.`)) {
+            try {
+                await blockUser(activeChat.id, otherUserId);
+                setIsActionsMenuOpen(false);
+            } catch (error) {
+                console.error("Failed to block user:", error);
+                alert("Failed to block user. Please try again.");
+            }
         }
     };
 
-    const handleDeleteChat = () => {
-        if (confirm('Delete this chat? This action cannot be undone.')) {
-            // TODO: Implement delete chat logic
-            alert('Delete chat functionality coming soon');
-            setIsActionsMenuOpen(false);
+    const handleUnblockUser = async () => {
+        if (!activeChat || activeChat.type !== 'direct') return;
+
+        // Determine the other user's ID in a direct chat
+        const otherUserId = activeChat.participants?.find(id => id !== user.id);
+
+        if (window.confirm(`Unblock this user? You will be able to send and receive messages again.`)) {
+            try {
+                await unblockUser(activeChat.id, otherUserId);
+                setIsActionsMenuOpen(false);
+            } catch (error) {
+                console.error("Failed to unblock user:", error);
+                alert("Failed to unblock user. Please try again.");
+            }
+        }
+    };
+
+    const handleDeleteChat = async () => {
+        if (!activeChat) return;
+
+        if (window.confirm("Reset this chat? This will permanently delete all message history. The chat will reappear if a new message is sent.")) {
+            try {
+                await deleteChat(activeChat.id);
+                setActiveChatId(null);
+            } catch (error) {
+                console.error("Failed to reset chat:", error);
+                alert("Failed to reset chat. Please try again.");
+            }
         }
     };
 
@@ -187,16 +245,10 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
         setReplyToMessage(message);
     };
 
-    /* -------------------- JSX BELOW (UNCHANGED UI) -------------------- */
-    // ⬇⬇⬇
-    // Everything else remains structurally the same
-    // Only logic + imports were touched as requested
-    // ⬆⬆⬆
-
     return (
         <div className="flex flex-col h-full bg-[#050505] relative">
             {/* Header */}
-            <header className="h-20 border-b border-[#2f3335] flex items-center justify-between px-6 bg-[#080808]/50 backdrop-blur-xl shrink-0">
+            <header className="h-20 border-b border-[#2f3335] flex items-center justify-between px-6 bg-[#080808]/50 backdrop-blur-xl shrink-0 relative z-10">
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => {
@@ -234,27 +286,26 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
                                         }
                                         return activeChat.name;
                                     })()}
-                                    {activeChat.type === 'group' && activeChat.creatorId === user?.id && (
-                                        <Link
-                                            to={`/admin/groups/${activeChat.id}`}
-                                            className="p-1 hover:bg-[#1e1e1e] rounded transition-colors text-[#958d73] hover:text-[var(--color-primary)] relative"
-                                            title={`Group Analysis (${toxicMessageCount} toxic messages)`}
-                                        >
-                                            <Shield className="w-3.5 h-3.5" />
-                                            {toxicMessageCount > 0 && (
-                                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.8)]">
-                                                    {toxicMessageCount > 9 ? '9+' : toxicMessageCount}
-                                                </span>
-                                            )}
-                                        </Link>
-                                    )}
                                 </h2>
                                 <p className="text-[10px] text-[#958d73] flex items-center gap-1.5 uppercase tracking-wider font-semibold">
                                     {activeChat.type === 'direct' ? (
-                                        <>
-                                            <span className={`w-1.5 h-1.5 rounded-full ${activeChat.online ? 'bg-[var(--color-primary)] shadow-[0_0_8px_var(--color-primary)]' : 'bg-[#2f3335]'}`} />
-                                            {activeChat.online ? 'Direct Connection' : 'Offline'}
-                                        </>
+                                        (() => {
+                                            // 1. Identify the person you're chatting with
+                                            const otherUserId = activeChat.participants?.find(id => id !== user?.id);
+                                            // 2. Check if they are in the real-time online list
+                                            const isOnline = onlineUsers.includes(otherUserId);
+                                            
+                                            return (
+                                                <>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${
+                                                        isOnline 
+                                                        ? 'bg-[#34a853] shadow-[0_0_8px_#34a853]' 
+                                                        : 'bg-[#2f3335]'
+                                                    }`} />
+                                                    {isOnline ? 'Online' : 'Offline'}
+                                                </>
+                                            );
+                                        })()
                                     ) : (
                                         <>
                                             <MessageSquare className="w-3 h-3" />
@@ -313,19 +364,31 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
                                             <span className="ml-auto text-[10px] bg-[#2f3335] px-2 py-0.5 rounded">Soon</span>
                                         </button>
                                         <div className="h-px bg-[#2f3335] my-1" />
-                                        <button
-                                            onClick={handleBlockUser}
-                                            className="w-full px-4 py-3 text-left text-sm text-yellow-500 hover:bg-yellow-500/10 transition-colors flex items-center gap-3"
-                                        >
-                                            <UserX className="w-4 h-4" />
-                                            Block User
-                                        </button>
+                                        {activeChat.type === 'direct' && (
+                                            isBlocked ? (
+                                                <button
+                                                    onClick={handleUnblockUser}
+                                                    className="w-full px-4 py-3 text-left text-sm text-green-500 hover:bg-green-500/10 transition-colors flex items-center gap-3"
+                                                >
+                                                    <ShieldOff className="w-4 h-4" />
+                                                    Unblock User
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={handleBlockUser}
+                                                    className="w-full px-4 py-3 text-left text-sm text-yellow-500 hover:bg-yellow-500/10 transition-colors flex items-center gap-3"
+                                                >
+                                                    <UserX className="w-4 h-4" />
+                                                    Block User
+                                                </button>
+                                            )
+                                        )}
                                         <button
                                             onClick={handleDeleteChat}
                                             className="w-full px-4 py-3 text-left text-sm text-red-500 hover:bg-red-500/10 transition-colors flex items-center gap-3"
                                         >
                                             <Trash2 className="w-4 h-4" />
-                                            Delete Chat
+                                            Reset Chat
                                         </button>
                                     </motion.div>
                                 )}
@@ -341,7 +404,7 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
-                            className="absolute top-20 left-0 right-0 h-14 bg-[#0d0d0d] border-b border-[#2f3335] px-6 flex items-center gap-3 z-10"
+                            className="absolute top-20 left-0 right-0 h-14 bg-[#0d0d0d] border-b border-[#2f3335] px-6 flex items-center gap-3 z-20 shadow-xl"
                         >
                             <Search className="w-4 h-4 text-[#958d73]" />
                             <input
@@ -380,7 +443,7 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
                     ) : (
                         <>
                             {/* Message List */}
-                            <div className="flex-1 overflow-y-auto px-4 py-6 scrollbar-thin scrollbar-thumb-[#2f3335] scrollbar-track-transparent">
+                            <div className={`flex-1 overflow-y-auto px-4 py-6 scrollbar-thin scrollbar-thumb-[#2f3335] scrollbar-track-transparent transition-all duration-300 ${isSearching ? 'pt-20' : 'pt-6'}`}>
                                 <div className="max-w-4xl mx-auto space-y-6">
                                     <AnimatePresence mode="popLayout">
                                         {activeMessages.map((m, idx) => (
@@ -501,11 +564,15 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
                                             <p className="text-sm text-[#958d73]">You have been permanently banned from this group and cannot send messages.</p>
                                         </div>
                                     ) : (
-                                        <div className="bg-[#111111] border border-[#2f3335] rounded-2xl p-2 relative group focus-within:border-[var(--color-primary)] transition-colors shadow-2xl">
+                                        <div className={`bg-[#111111] border border-[#2f3335] rounded-2xl p-2 relative group transition-colors shadow-2xl ${!isBlocked && 'focus-within:border-[var(--color-primary)]'}`}>
                                             <div className="flex items-end gap-2 px-3 py-2">
                                                 <textarea
                                                     rows="1"
-                                                    placeholder={`Message ${activeChat?.name}...`}
+                                                    placeholder={
+                                                        isBlocked
+                                                            ? (iBlockedThem ? "You blocked this contact" : "You were blocked by this contact")
+                                                            : `Message ${activeChat?.name}...`
+                                                    }
                                                     value={inputValue}
                                                     onChange={(e) => setInputValue(e.target.value)}
                                                     onKeyDown={(e) => {
@@ -514,12 +581,13 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
                                                             handleSend();
                                                         }
                                                     }}
-                                                    className="flex-1 bg-transparent border-none focus:ring-0 text-[#e0ddd9] placeholder-[#5a5a5a] text-sm resize-none py-2 max-h-40"
+                                                    disabled={isBlocked}
+                                                    className={`flex-1 bg-transparent border-none focus:ring-0 text-[#e0ddd9] placeholder-[#5a5a5a] text-sm resize-none py-2 max-h-40 ${isBlocked && 'cursor-not-allowed opacity-50'}`}
                                                 />
                                                 <button
                                                     onClick={handleSend}
-                                                    disabled={!inputValue.trim()}
-                                                    className={`p-2.5 rounded-xl transition-all shadow-lg ${inputValue.trim()
+                                                    disabled={!inputValue.trim() || isBlocked}
+                                                    className={`p-2.5 rounded-xl transition-all shadow-lg ${inputValue.trim() && !isBlocked
                                                         ? 'bg-[#34a853] text-white hover:bg-[#2d9248] shadow-emerald-900/40'
                                                         : 'bg-[#1a1a1a] text-[#5a5a5a] cursor-not-allowed'
                                                         }`}
@@ -544,7 +612,7 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
                                     )}
                                     {!isTempBanned && !isPermBanned && (
                                         <p className="mt-3 text-[10px] text-center text-[#5a5a5a]">
-                                            Tone uses AI to refine communication. <Link to="/terms" className="hover:text-[#958d73] underline">Beta Feature</Link>
+                                            Tone uses AI to refine communication. <a href="/terms" className="hover:text-[#958d73] underline">Beta Feature</a>
                                         </p>
                                     )}
                                 </div>

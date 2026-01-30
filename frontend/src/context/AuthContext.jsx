@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { loginUser, registerUser } from '../services/api';
+import { auth, db } from '../lib/firebase'; // Ensure these are exported from your firebase config
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { loginUser, registerUser, logoutUser } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -9,72 +12,59 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // This is the "Magic" part: Real-time Auth Sync
     useEffect(() => {
-        // Check localStorage for existing session with safety
-        try {
-            const storedUser = localStorage.getItem('tone_user');
-            if (storedUser) {
-                const parsedUser = JSON.parse(storedUser);
-                console.log('👤 [AuthContext] Session restored:', {
-                    userId: parsedUser.id,
-                    email: parsedUser.email,
-                    name: parsedUser.name
-                });
-                setUser(parsedUser);
-            } else {
-                console.log('🔓 [AuthContext] No stored session found');
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            try {
+                if (firebaseUser) {
+                    // 1. Get the latest profile from Firestore (where the role lives)
+                    const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+                    const profileData = userDoc.exists() ? userDoc.data() : {};
+
+                    const fullUser = {
+                        id: firebaseUser.uid,
+                        email: firebaseUser.email,
+                        ...profileData
+                    };
+
+                    console.log('👤 [AuthContext] Authority Verified:', fullUser.role);
+                    setUser(fullUser);
+                    localStorage.setItem('tone_user', JSON.stringify(fullUser));
+                } else {
+                    setUser(null);
+                    localStorage.removeItem('tone_user');
+                }
+            } catch (error) {
+                console.error("❌ [AuthContext] Sync Error:", error);
+                setUser(null);
+            } finally {
+                setLoading(false);
             }
-        } catch (e) {
-            console.error("❌ [AuthContext] Session recovery failed", e);
-            localStorage.removeItem('tone_user'); // Clear corrupt data
-        } finally {
-            setLoading(false);
-        }
+        });
+
+        return () => unsubscribe(); // Cleanup listener on unmount
     }, []);
 
     const login = async (email, password) => {
-        try {
-            const data = await loginUser(email, password);
-            console.log('✅ [AuthContext] Login successful:', {
-                userId: data.user.id,
-                email: data.user.email,
-                name: data.user.name
-            });
-            setUser(data.user);
-            localStorage.setItem('tone_user', JSON.stringify(data.user));
-            return data.user;
-        } catch (error) {
-            console.error('❌ [AuthContext] Login error:', error);
-            throw error;
-        }
+        // api.js handles the Firebase sign-in logic
+        const data = await loginUser(email, password);
+        // Note: setUser is handled by onAuthStateChanged listener above
+        return data.user;
     };
 
     const signup = async (name, email, password, adminSecret) => {
+        const data = await registerUser(name, email, password, adminSecret);
+        return data.user;
+    };
+
+    const logout = async () => {
         try {
-            const data = await registerUser(name, email, password, adminSecret);
-            console.log('✅ [AuthContext] Signup successful:', {
-                userId: data.user.id,
-                email: data.user.email,
-                name: data.user.name
-            });
-            setUser(data.user);
-            localStorage.setItem('tone_user', JSON.stringify(data.user));
-            return data.user;
+            await logoutUser();
+            setUser(null);
+            localStorage.removeItem('tone_user');
         } catch (error) {
-            console.error('❌ [AuthContext] Signup error:', error);
-            throw error;
+            console.error('Logout error:', error);
         }
-    };
-
-    const logout = () => {
-        console.log('🚪 [AuthContext] User logging out');
-        setUser(null);
-        localStorage.removeItem('tone_user');
-    };
-
-    const updateUser = (updatedUser) => {
-        setUser(updatedUser);
-        localStorage.setItem('tone_user', JSON.stringify(updatedUser));
     };
 
     const value = {
@@ -82,8 +72,8 @@ export const AuthProvider = ({ children }) => {
         login,
         signup,
         logout,
-        updateUser,
-        loading
+        loading,
+        isAdmin: user?.role === 'admin' || user?.role === 'super_admin'
     };
 
     return (

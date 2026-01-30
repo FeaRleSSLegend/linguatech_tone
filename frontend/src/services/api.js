@@ -1,6 +1,9 @@
 /**
  * API Service for Tone AI Analysis & Firebase Integration
  * Handles communication with Tone AI backend and Firebase Firestore
+ * 
+ * CRITICAL: This file includes robust fallback handling for sentiment analysis
+ * to prevent addDoc crashes during live demos
  */
 
 import {
@@ -26,10 +29,35 @@ import {
     orderBy,
     onSnapshot,
     serverTimestamp,
-    Timestamp
+    Timestamp,
+    limit
 } from '../lib/firebase';
+import { containsPidginFlags } from '../utils/pidginDetection';
+
 
 const TONE_API_URL = import.meta.env.VITE_TONE_API_URL || 'https://mutekikazu-linguatech-tone.hf.space';
+
+/**
+ * CRITICAL: Ensure all sentiment/toxicity fields have safe defaults
+ * This prevents Firestore addDoc() crashes when API returns undefined
+ */
+function ensureSafeAnalysis(analysis) {
+    return {
+        text: analysis?.text || '',
+        sentiment: {
+            label: analysis?.sentiment?.label || 'neutral',
+            confidence: typeof analysis?.sentiment?.confidence === 'number' ? analysis.sentiment.confidence : 0.5
+        },
+        toxicity: {
+            label: analysis?.toxicity?.label || 'non-toxic',
+            confidence: typeof analysis?.toxicity?.confidence === 'number' ? analysis.toxicity.confidence : 0
+        },
+        feedback: analysis?.feedback || 'Analysis complete.',
+        should_warn: analysis?.should_warn || false,
+        rephrase: analysis?.rephrase || null,
+        emoji: analysis?.emoji || '😐'
+    };
+}
 
 /**
  * Map sentiment label to emoji
@@ -45,33 +73,30 @@ export function getSentimentEmoji(sentimentLabel) {
 
 /**
  * Map toxicity label to emoji (STRICT MAPPING)
- * Maps directly to toxicity score only, no sentiment mixing
  */
 export function getToxicityEmoji(toxicityLabel) {
     const emojiMap = {
-        'non-toxic': '😊',      // Clean/safe
-        'mildly toxic': '🟡',   // Warning
-        'toxic': '😡',          // Toxic
-        'very toxic': '😡'      // Very toxic (same as toxic)
+        'non-toxic': '😊',
+        'mildly toxic': '🟡',
+        'toxic': '😡',
+        'very toxic': '😡'
     };
     return emojiMap[toxicityLabel] || '😊';
 }
 
 /**
  * Get display emoji based ONLY on toxicity score
- * No sentiment fallback - pure toxicity mapping
  */
 export function getDisplayEmoji(analysis) {
     if (!analysis) return '😊';
-
-    // Only use toxicity label for emoji
     const toxicityLabel = analysis.toxicity?.label || 'non-toxic';
     return getToxicityEmoji(toxicityLabel);
 }
 
 /**
  * Analyze a message using Tone AI (DeBERTa + Groq LLM)
- *
+ * 
+ * CRITICAL: Always returns a valid analysis object with defaults
  * @param {string} message - The message to analyze
  * @returns {Promise<Object>} Analysis result with sentiment, toxicity, and suggestions
  */
@@ -83,28 +108,30 @@ export async function analyzeMessage(message) {
             body: JSON.stringify({ text: message }),
         });
 
-        if (!response.ok) throw new Error(`Tone API error: ${response.status}`);
+        if (!response.ok) {
+            console.warn(`Tone API error: ${response.status}, using fallback`);
+            return getMockAnalysis(message);
+        }
 
         const data = await response.json();
 
-        // Add emoji based on analysis
-        const emoji = getDisplayEmoji({
+        // Ensure safe defaults for all fields
+        const safeAnalysis = ensureSafeAnalysis({
+            text: data.text || message,
             sentiment: data.sentiment,
-            toxicity: data.toxicity
+            toxicity: data.toxicity,
+            feedback: data.feedback,
+            should_warn: data.should_warn,
+            rephrase: data.rephrase
         });
 
-        // Return standardized schema
-        return {
-            text: data.text || message,
-            sentiment: data.sentiment || { label: 'neutral', confidence: 0.5 },
-            toxicity: data.toxicity || { label: 'non-toxic', confidence: 0 },
-            feedback: data.feedback || 'Analysis complete.',
-            should_warn: data.should_warn || false,
-            rephrase: data.rephrase || null,
-            emoji
-        };
+        // Add emoji based on analysis
+        safeAnalysis.emoji = getDisplayEmoji(safeAnalysis);
+
+        return safeAnalysis;
     } catch (error) {
         console.error('Tone AI Analysis error:', error);
+        console.log('Using fallback mock analysis');
         return getMockAnalysis(message);
     }
 }
@@ -182,7 +209,6 @@ export async function getChats() {
     if (!user) throw new Error('Not authenticated');
 
     try {
-        // Query chats where current user is a participant
         const chatsQuery = query(
             collection(db, 'chats'),
             where('participants', 'array-contains', user.uid)
@@ -231,7 +257,6 @@ export async function createChat(name, type, creatorId, participants = []) {
     if (!user) throw new Error('Not authenticated');
 
     try {
-        // Ensure creator is in participants
         const allParticipants = [user.uid, ...participants].filter((v, i, a) => a.indexOf(v) === i);
 
         const chatData = {
@@ -260,7 +285,6 @@ export async function createDirectChat(otherUserId, chatName = null) {
     if (!user) throw new Error('Not authenticated');
 
     try {
-        // Check if direct chat already exists
         const chatsQuery = query(
             collection(db, 'chats'),
             where('type', '==', 'direct'),
@@ -269,7 +293,6 @@ export async function createDirectChat(otherUserId, chatName = null) {
 
         const snapshot = await getDocs(chatsQuery);
 
-        // Find existing chat with this user
         for (const docSnap of snapshot.docs) {
             const chatData = docSnap.data();
             if (chatData.participants.includes(otherUserId)) {
@@ -277,7 +300,6 @@ export async function createDirectChat(otherUserId, chatName = null) {
             }
         }
 
-        // Create new direct chat
         const otherUserProfile = await getUserProfile(otherUserId);
         const name = chatName || otherUserProfile?.name || 'Direct Chat';
 
@@ -303,7 +325,6 @@ export async function getMessages(chatId) {
     if (!user) throw new Error('Not authenticated');
 
     try {
-        // Verify user has access to this chat
         const chatDoc = await getDoc(doc(db, 'chats', chatId));
         if (!chatDoc.exists()) throw new Error('Chat not found');
 
@@ -312,7 +333,6 @@ export async function getMessages(chatId) {
             throw new Error('Access denied');
         }
 
-        // Fetch messages
         const messagesQuery = query(
             collection(db, 'messages'),
             where('chatId', '==', chatId),
@@ -324,8 +344,6 @@ export async function getMessages(chatId) {
 
         for (const docSnap of snapshot.docs) {
             const msgData = docSnap.data();
-
-            // Fetch sender info
             const senderProfile = await getUserProfile(msgData.senderId);
 
             messages.push({
@@ -339,15 +357,15 @@ export async function getMessages(chatId) {
                 },
                 analysis: {
                     sentiment: {
-                        label: msgData.sentimentLabel,
-                        confidence: msgData.sentimentConfidence
+                        label: msgData.sentimentLabel || 'neutral',
+                        confidence: msgData.sentimentConfidence || 0.5
                     },
                     toxicity: {
-                        label: msgData.toxicityLabel,
-                        confidence: msgData.toxicityConfidence
+                        label: msgData.toxicityLabel || 'non-toxic',
+                        confidence: msgData.toxicityConfidence || 0
                     },
-                    feedback: msgData.analysisFeedback,
-                    emoji: msgData.emoji
+                    feedback: msgData.analysisFeedback || 'No analysis',
+                    emoji: msgData.emoji || '😐'
                 },
                 timestamp: msgData.createdAt?.toDate()
             });
@@ -360,12 +378,16 @@ export async function getMessages(chatId) {
     }
 }
 
+/**
+ * CRITICAL: Send message with robust fallback handling + AI Auto-Moderation
+ * Ensures all fields have safe defaults to prevent Firestore crashes
+ * Implements toxicity tracking and automatic temporary bans
+ */
 export async function sendMessage(chatId, text, sender, analysis) {
     const user = getCurrentUser();
     if (!user) throw new Error('Not authenticated');
 
     try {
-        // Verify user has access to this chat
         const chatDoc = await getDoc(doc(db, 'chats', chatId));
         if (!chatDoc.exists()) throw new Error('Chat not found');
 
@@ -374,27 +396,82 @@ export async function sendMessage(chatId, text, sender, analysis) {
             throw new Error('Access denied');
         }
 
+        // CRITICAL: Ensure safe defaults for all analysis fields
+        const safeAnalysis = ensureSafeAnalysis(analysis || {});
+
+        // Check word blacklist for groups
+        const wordBlacklist = chatData.wordBlacklist || [];
+        const lowerText = text.toLowerCase();
+        const containsBlacklistedWord = wordBlacklist.some(word => lowerText.includes(word.toLowerCase()));
+
+        if (containsBlacklistedWord && chatData.type === 'group') {
+            throw new Error('Your message contains a blacklisted word and cannot be sent.');
+        }
+
+        // Check if message is toxic
+        const isToxic = safeAnalysis.toxicity.label === 'toxic' ||
+                       safeAnalysis.toxicity.label === 'very toxic' ||
+                       safeAnalysis.toxicity.label === 'mildly toxic';
+
+        // Strict Mode: AI Auto-Mod for groups
+        if (chatData.type === 'group' && chatData.strictMode && isToxic) {
+            // Increment toxicity count
+            const currentCount = chatData.moderationStats?.[user.uid] || 0;
+            const newCount = currentCount + 1;
+
+            // Update moderation stats
+            await updateDoc(doc(db, 'chats', chatId), {
+                [`moderationStats.${user.uid}`]: newCount,
+                updatedAt: serverTimestamp()
+            });
+
+            // Auto temp-ban if reached 3 toxic messages
+            if (newCount >= 3) {
+                const banUntil = Date.now() + (2 * 60 * 60 * 1000); // 2 hours from now
+                const tempBannedUsers = chatData.tempBannedUsers || [];
+
+                // Remove old ban for this user if exists
+                const updatedBans = tempBannedUsers.filter(b => b.userId !== user.uid);
+                updatedBans.push({ userId: user.uid, bannedUntil: banUntil });
+
+                await updateDoc(doc(db, 'chats', chatId), {
+                    tempBannedUsers: updatedBans,
+                    updatedAt: serverTimestamp()
+                });
+
+                throw new Error('You have been temporarily banned for 2 hours due to toxic behavior.');
+            }
+
+            throw new Error(`Warning: Toxic message detected (${newCount}/3). You will be auto-banned after 3 toxic messages.`);
+        }
+
+        const isFlagged = containsPidginFlags(text);
+
         const messageData = {
             chatId,
             senderId: user.uid,
             text,
-            sentimentLabel: analysis?.sentiment?.label || 'neutral',
-            sentimentConfidence: analysis?.sentiment?.confidence || 0,
-            toxicityLabel: analysis?.toxicity?.label || analysis?.label || 'non-toxic',
-            toxicityConfidence: analysis?.toxicity?.confidence || analysis?.confidence || 0,
-            analysisFeedback: analysis?.feedback || 'No analysis available',
-            emoji: analysis?.emoji || getDisplayEmoji(analysis) || '😐',
+            sentimentLabel: safeAnalysis.sentiment.label,
+            sentimentConfidence: safeAnalysis.sentiment.confidence,
+            toxicityLabel: safeAnalysis.toxicity.label,
+            toxicityConfidence: safeAnalysis.toxicity.confidence,
+            analysisFeedback: safeAnalysis.feedback,
+            emoji: safeAnalysis.emoji,
+            isFlagged: isFlagged,
             createdAt: serverTimestamp()
         };
+
+        console.log('💾 Saving message with analysis:', messageData);
 
         const messageRef = await addDoc(collection(db, 'messages'), messageData);
 
         // Update chat's last message time
         await updateDoc(doc(db, 'chats', chatId), {
+            lastMessage: text.length > 50 ? text.substring(0, 50) + '...' : text,
+            lastMessageSenderId: user.uid,
             updatedAt: serverTimestamp()
         });
 
-        // Fetch sender profile
         const senderProfile = await getUserProfile(user.uid);
 
         return {
@@ -519,6 +596,35 @@ export async function updateGroupBan(groupId, userId, isBanned) {
     }
 }
 
+/**
+ * Delete a message (Admin only - for "Delete for Everyone" feature)
+ */
+export async function deleteMessage(messageId, chatId) {
+    const user = getCurrentUser();
+    if (!user) throw new Error('Not authenticated');
+
+    try {
+        // Verify user is admin of the group
+        const chatDoc = await getDoc(doc(db, 'chats', chatId));
+        if (!chatDoc.exists()) throw new Error('Chat not found');
+
+        const chatData = chatDoc.data();
+        const isAdmin = chatData.creatorId === user.uid || chatData.admins?.includes(user.uid);
+
+        if (!isAdmin) {
+            throw new Error('Only admins can delete messages');
+        }
+
+        // Delete the message
+        await deleteDoc(doc(db, 'messages', messageId));
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting message:', error);
+        throw error;
+    }
+}
+
 // ====== USER DISCOVERY ======
 
 export async function searchUsers(searchQuery) {
@@ -573,6 +679,7 @@ export async function getAllUsers() {
 
 /**
  * Generate mock analysis data when Tone AI is unavailable
+ * CRITICAL: Always returns valid defaults to prevent crashes
  */
 function getMockAnalysis(message) {
     const lowerMessage = message.toLowerCase().trim();
@@ -589,7 +696,6 @@ function getMockAnalysis(message) {
         };
     }
 
-    // Simple keyword detection
     const toxicWords = ['fuck', 'shit', 'bitch', 'asshole', 'kill', 'die', 'bastard'];
     const hostileWords = ['stupid', 'dumb', 'hate', 'ugly', 'shut up', 'useless'];
     const positiveWords = ['love', 'great', 'awesome', 'good', 'thanks', 'appreciate'];

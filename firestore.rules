@@ -36,31 +36,93 @@ service cloud.firestore {
 
     // CHATS COLLECTION
     match /chats/{chatId} {
-      // Simplified permissions: authenticated users can create, read, update chats
-      allow create, read, update: if isAuthenticated();
+      // Helper function: Check if user is a participant in the chat
+      function isParticipant() {
+        return isAuthenticated() && request.auth.uid in resource.data.participants;
+      }
 
-      // Group creators and admins can update ban fields
+      // Helper function: Check if user is a group admin
+      function isGroupAdmin() {
+        return isAuthenticated() && (
+          request.auth.uid == resource.data.creatorId ||
+          request.auth.uid in resource.data.admins
+        );
+      }
+
+      // Helper function: Check if user is the group creator
+      function isGroupCreator() {
+        return isAuthenticated() && request.auth.uid == resource.data.creatorId;
+      }
+
+      // Simplified permissions: authenticated users can create, read chats
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
+
+      // Participants can update basic fields (lastMessage, updatedAt, blockedBy)
       allow update: if isAuthenticated() && (
+        isParticipant() ||
         request.auth.uid == resource.data.creatorId ||
         isAdmin()
       );
 
-      // Only admins can delete chats
-      allow delete: if isAdmin();
+      // ADMIN ONLY: Update moderation fields (moderationStats, tempBannedUsers, wordBlacklist)
+      allow update: if isAuthenticated() && isGroupAdmin() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'moderationStats', 'tempBannedUsers', 'permBannedUsers', 'wordBlacklist', 'updatedAt'
+        ])
+      );
+
+      // OWNER ONLY: Update group settings (name, description, avatar, strictMode)
+      allow update: if isAuthenticated() && isGroupCreator() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'description', 'profilePictureUrl', 'strictMode', 'updatedAt'
+        ])
+      );
+
+      // Participants can delete chats (for conversation reset)
+      allow delete: if isParticipant() || isAdmin();
     }
 
     // MESSAGES COLLECTION
     match /messages/{messageId} {
-      // Simplified permissions: authenticated users can create and read messages
-      allow create, read: if isAuthenticated();
+      // Helper function: Check if user is a participant in the message's chat
+      function isMessageParticipant() {
+        return isAuthenticated() &&
+               request.auth.uid in get(/databases/$(database)/documents/chats/$(resource.data.chatId)).data.participants;
+      }
 
-      // Only sender or admin can update/delete messages
+      // Helper function: Check if user is a group admin for this message's chat
+      function isMessageGroupAdmin() {
+        let chatDoc = get(/databases/$(database)/documents/chats/$(resource.data.chatId));
+        return isAuthenticated() && (
+          request.auth.uid == chatDoc.data.creatorId ||
+          request.auth.uid in chatDoc.data.admins
+        );
+      }
+
+      // Helper function: Check if the chat has an active block
+      function chatHasActiveBlock(chatId) {
+        let chatDoc = get(/databases/$(database)/documents/chats/$(chatId));
+        return chatDoc.data.blockedBy != null && chatDoc.data.blockedBy.size() > 0;
+      }
+
+      // HARD RESTRICTION: Block message creation if chat has any blocks
+      allow create: if isAuthenticated() &&
+                       !chatHasActiveBlock(request.resource.data.chatId);
+
+      allow read: if isAuthenticated();
+
+      // Only sender or global admin can update messages
       allow update: if isAuthenticated() && (
                        request.auth.uid == resource.data.senderId ||
                        isAdmin()
                      );
+
+      // ENHANCED DELETE: Sender, chat participants (for conversation reset), group admins, or global admin can delete
       allow delete: if isAuthenticated() && (
                        request.auth.uid == resource.data.senderId ||
+                       isMessageParticipant() ||
+                       isMessageGroupAdmin() ||
                        isAdmin()
                      );
     }

@@ -1,25 +1,16 @@
 import { motion } from 'framer-motion';
 import { useState, useRef } from 'react';
 
-/**
- * MessageBubble Component
- * Displays a single chat message with appropriate styling based on sender type
- *
- * @param {Object} props
- * @param {Object} props.message - The message object from backend/context
- * @param {boolean} props.isOwn - Whether the message was sent by the current user
- * @param {Function} props.onReply - Callback when user wants to reply to this message
- */
 export default function MessageBubble({ message, isOwn, onReply }) {
     if (!message) return null;
 
-    const { text, timestamp, analysis, sender } = message;
-    const [showReplyPrompt, setShowReplyPrompt] = useState(false);
+    const { text, timestamp, analysis, sender, replyTo } = message;
     const longPressTimerRef = useRef(null);
-    const status = analysis?.label || 'safe';
-    const emoji = analysis?.emoji || '';
+    
+    // Status and Toxic detection - expanded to catch all negative labels
+    const status = analysis?.label?.toLowerCase() || 'safe';
+    const isToxic = ['toxic', 'warning', 'negative', 'extreme'].includes(status);
 
-    // Status colors for the indicator dot
     const statusColors = {
         safe: 'bg-[var(--color-safe)]',
         warning: 'bg-yellow-500',
@@ -28,33 +19,17 @@ export default function MessageBubble({ message, isOwn, onReply }) {
         neutral: 'bg-gray-500'
     };
 
-    const formattedTime = new Date(timestamp).toLocaleTimeString([], {
+    // Standardize timestamp handling
+    const msgDate = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+    const formattedTime = msgDate.toLocaleTimeString([], {
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true
     });
 
-    // Right-click handler (PC)
     const handleContextMenu = (e) => {
         e.preventDefault();
-        if (onReply) {
-            onReply(message);
-        }
-    };
-
-    // Long-press handlers (Mobile)
-    const handleTouchStart = () => {
-        longPressTimerRef.current = setTimeout(() => {
-            setShowReplyPrompt(true);
-            if (onReply) {
-                onReply(message);
-            }
-        }, 500); // 500ms long press
-    };
-
-    const handleTouchEnd = () => {
-        if (longPressTimerRef.current) {
-            clearTimeout(longPressTimerRef.current);
-        }
+        if (onReply) onReply(message);
     };
 
     return (
@@ -62,34 +37,57 @@ export default function MessageBubble({ message, isOwn, onReply }) {
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}
+            className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4 px-4`}
         >
             <div
                 onContextMenu={handleContextMenu}
-                onTouchStart={handleTouchStart}
-                onTouchEnd={handleTouchEnd}
                 className={`
-                    relative max-w-[80%] md:max-w-[70%] rounded-2xl px-4 py-2.5 shadow-sm cursor-pointer
-                    hover:ring-1 hover:ring-[var(--color-primary)]/30 transition-all
-                    ${isOwn
-                        ? 'bg-[#2a2a2a] text-[#e0ddd9] rounded-tr-sm'
-                        : 'bg-[#1a1a1a] text-[#e0ddd9] border border-[#2f3335] rounded-tl-sm'
+                    relative max-w-[85%] md:max-w-[70%] rounded-2xl px-4 py-2.5 shadow-sm cursor-pointer
+                    transition-all duration-300
+                    ${isToxic 
+                        ? 'border-2 border-red-500 bg-red-900/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
+                        : isOwn 
+                            ? 'bg-[#2a2a2a] text-[#e0ddd9] rounded-tr-sm' 
+                            : 'bg-[#1a1a1a] text-[#e0ddd9] border border-[#2f3335] rounded-tl-sm'
                     }
                 `}
             >
-                {/* Sender Name (for group chats) */}
-                {!isOwn && sender?.name && (
-                    <p className="text-[#34a853] text-[10px] mb-1 font-black uppercase tracking-wider">{sender.name}</p>
+                {/* 1. Toxic Label (Resonance Shield) */}
+                {isToxic && (
+                    <div className="text-[9px] font-black text-red-500 uppercase tracking-tighter mb-1 flex items-center gap-1">
+                        <div className="w-1 h-1 bg-red-500 rounded-full animate-pulse" />
+                        Resonance Shield Active
+                    </div>
                 )}
 
-                {/* Message Content */}
-                <p className="text-sm leading-relaxed break-words">
+                {/* 2. WhatsApp-Style Quoted Reply Block */}
+                {replyTo && (
+                    <div className="mb-2 flex items-stretch bg-black/25 rounded-lg overflow-hidden border-l-4 border-[var(--color-primary)]">
+                        <div className="p-2 py-1 flex flex-col min-w-0">
+                            <span className="text-[10px] font-bold text-[var(--color-primary)] truncate">
+                                {replyTo.senderName || 'User'}
+                            </span>
+                            <span className="text-xs italic text-gray-400 line-clamp-1 break-all">
+                                {replyTo.text}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                {/* 3. Sender Name (For Groups) */}
+                {!isOwn && sender?.name && !isToxic && (
+                    <p className="text-[#34a853] text-[10px] mb-1 font-black uppercase tracking-wider">
+                        {sender.name}
+                    </p>
+                )}
+
+                {/* 4. Message Content */}
+                <p className={`text-sm leading-relaxed break-words ${isToxic ? 'text-red-100 font-medium' : ''}`}>
                     {text}
                 </p>
 
-                {/* Footer: Timestamp & Status */}
+                {/* 5. Footer: Time & Status Dot */}
                 <div className={`flex items-center gap-2 mt-1.5 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                    {emoji && <span className="text-xs">{emoji}</span>}
                     <span className="text-[#5a5a5a] text-[10px] font-medium">{formattedTime}</span>
                     <span className={`w-1.5 h-1.5 rounded-full ${statusColors[status] || 'bg-[#5a5a5a]'}`} />
                 </div>

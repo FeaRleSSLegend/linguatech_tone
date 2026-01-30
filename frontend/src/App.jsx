@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ChatInterface from './components/ChatInterface';
 import Sidebar from './components/Sidebar';
+import MobileChatLayout from './components/MobileChatLayout';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -27,7 +28,6 @@ const springTransition = {
 function App() {
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [currentView, setCurrentView] = useState('chats'); // 'chats', 'chat-room', 'profile'
   const { activeChatId, setActiveChatId } = useChat();
   const { user } = useAuth();
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
@@ -52,24 +52,10 @@ function App() {
     };
   }, [user]);
 
-  // Sync currentView with activeChatId
-  useEffect(() => {
-    if (activeChatId) {
-      setCurrentView('chat-room');
-    } else {
-      setCurrentView('chats');
-    }
-  }, [activeChatId]);
-
   const handleAnalysisUpdate = useCallback((newAnalysis, analyzing) => {
     setAnalysis(newAnalysis);
     setIsAnalyzing(analyzing);
   }, []);
-
-  const handleBackToChats = () => {
-    setActiveChatId(null);
-    setCurrentView('chats');
-  };
 
   return (
     <>
@@ -87,55 +73,29 @@ function App() {
           element={
             <ProtectedRoute>
               <div className="min-h-screen bg-[#080808] flex h-screen overflow-hidden relative">
-                {/* Desktop Sidebar */}
-                <aside className="hidden md:block w-[300px] h-full border-r border-[#2f3335]">
-                  <Sidebar onViewChange={setCurrentView} pendingRequestsCount={pendingRequestsCount} />
+                {/* Desktop Layout */}
+                <aside className="hidden md:block h-full border-r border-[#2f3335] shrink-0 overflow-hidden">
+                  <Sidebar pendingRequestsCount={pendingRequestsCount} />
                 </aside>
 
-                {/* Mobile: Conditional rendering based on currentView */}
-                <div className="md:hidden w-full h-full pb-16 relative overflow-hidden">
-                  <AnimatePresence mode="wait" initial={false}>
-                    {currentView === 'chats' && (
-                      <motion.div
-                        key="chats"
-                        initial={{ x: -300, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: -300, opacity: 0 }}
-                        transition={springTransition}
-                        className="absolute inset-0 pb-16"
-                      >
-                        <Sidebar onViewChange={setCurrentView} pendingRequestsCount={pendingRequestsCount} />
-                      </motion.div>
-                    )}
-
-                    {currentView === 'chat-room' && (
-                      <motion.div
-                        key="chat-room"
-                        initial={{ x: 300, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: 300, opacity: 0 }}
-                        transition={springTransition}
-                        className="absolute inset-0"
-                      >
-                        <ChatInterface
-                          onAnalysisUpdate={handleAnalysisUpdate}
-                          onBackToChats={handleBackToChats}
-                        />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                {/* Desktop Chat Section */}
-                <main className="hidden md:flex flex-1 flex-col h-full relative">
+                {/* Ensure the main chat takes the rest of the space and handles its own overflow */}
+                <main className="hidden md:flex flex-1 flex-col h-full relative overflow-hidden min-w-0">
                   <ChatInterface onAnalysisUpdate={handleAnalysisUpdate} />
                 </main>
 
-                {/* Mobile Bottom Bar (rendered by Sidebar) */}
+                {/* Mobile Layout - Fixed blank screen issue */}
+                <div className="md:hidden w-full h-full">
+                  <MobileChatLayout 
+                    onAnalysisUpdate={handleAnalysisUpdate}
+                    pendingRequestsCount={pendingRequestsCount}
+                  />
+                </div>
               </div>
             </ProtectedRoute>
           }
         />
+
+        {/* Admin Routes */}
         <Route
           path="/admin/reports"
           element={

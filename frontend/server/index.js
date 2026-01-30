@@ -59,9 +59,19 @@ app.get('/', (req, res) => {
 });
 
 // --- Socket.io Logic ---
+const userSocketMap = {};  // Add this line
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
+
+    // 1. Map the connecting user - ADD THIS
+    const userId = socket.handshake.query.userId;
+    if (userId && userId !== "undefined") {
+        userSocketMap[userId] = socket.id;
+    }
+
+    // 2. Tell everyone who is currently online - ADD THIS
+    io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
     socket.on('join_chat', async ({ chatId, userId }) => {
         const chats = await getData(CHATS_FILE);
@@ -119,6 +129,11 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
+        // Remove user from map and broadcast new list - ADD THIS
+        if (userId) {
+            delete userSocketMap[userId];
+            io.emit("getOnlineUsers", Object.keys(userSocketMap));
+        }
     });
 });
 

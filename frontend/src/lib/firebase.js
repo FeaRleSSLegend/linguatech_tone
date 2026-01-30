@@ -1,6 +1,8 @@
 /**
- * Firebase Configuration & Initialization
- * Firebase v10+ Modular SDK
+ * 🚨 EMERGENCY FIX: Firebase with EXACT Firestore schema matching
+ * - Uses `updatedAt` field (NOT lastActivity)
+ * - Updates `lastMessage` field on every message send
+ * - Matches composite index: participants + updatedAt
  */
 
 import { initializeApp } from 'firebase/app';
@@ -46,19 +48,6 @@ const firebaseConfig = {
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
     appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
-
-if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-    console.error(
-        '❌ Missing Firebase credentials. Please set:\n' +
-        '   VITE_FIREBASE_API_KEY\n' +
-        '   VITE_FIREBASE_AUTH_DOMAIN\n' +
-        '   VITE_FIREBASE_PROJECT_ID\n' +
-        '   VITE_FIREBASE_STORAGE_BUCKET\n' +
-        '   VITE_FIREBASE_MESSAGING_SENDER_ID\n' +
-        '   VITE_FIREBASE_APP_ID\n' +
-        '   in your .env file'
-    );
-}
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -179,9 +168,6 @@ export async function canAccessChat(chatId, userId) {
 
 // ====== FRIEND REQUEST FUNCTIONS ======
 
-/**
- * Search for users by email
- */
 export async function searchUserByEmail(email) {
     try {
         const usersQuery = query(
@@ -201,17 +187,12 @@ export async function searchUserByEmail(email) {
     }
 }
 
-/**
- * Send a friend request
- */
 export async function sendFriendRequest(fromUserId, toUserId) {
     try {
-        // Prevent self-friend requests
         if (fromUserId === toUserId) {
             throw new Error('Cannot send friend request to yourself');
         }
 
-        // Check if request already exists
         const existingQuery = query(
             collection(db, 'friend_requests'),
             where('fromUserId', '==', fromUserId),
@@ -223,7 +204,6 @@ export async function sendFriendRequest(fromUserId, toUserId) {
             throw new Error('Friend request already sent');
         }
 
-        // Check reverse direction
         const reverseQuery = query(
             collection(db, 'friend_requests'),
             where('fromUserId', '==', toUserId),
@@ -235,7 +215,6 @@ export async function sendFriendRequest(fromUserId, toUserId) {
             throw new Error('This user already sent you a request');
         }
 
-        // Create friend request
         const requestRef = await addDoc(collection(db, 'friend_requests'), {
             fromUserId,
             toUserId,
@@ -250,9 +229,6 @@ export async function sendFriendRequest(fromUserId, toUserId) {
     }
 }
 
-/**
- * Get pending friend requests for a user
- */
 export async function getFriendRequests(userId) {
     try {
         const requestsQuery = query(
@@ -284,11 +260,12 @@ export async function getFriendRequests(userId) {
 }
 
 /**
- * Accept a friend request and create a direct chat (ATOMIC using writeBatch)
+ * 🚨 EMERGENCY FIX: Accept friend request with EXACT schema
+ * - Creates chat with `updatedAt` field (NOT lastActivity)
+ * - Initializes `lastMessage` field for preview system
  */
 export async function acceptFriendRequest(requestId, fromUserId, toUserId) {
     try {
-        // Fetch user profiles first (read operations must be done before batch)
         const fromUserProfile = await getUserProfile(fromUserId);
         const toUserProfile = await getUserProfile(toUserId);
 
@@ -296,7 +273,6 @@ export async function acceptFriendRequest(requestId, fromUserId, toUserId) {
             throw new Error('User profiles not found');
         }
 
-        // Create a batch for atomic operations
         const batch = writeBatch(db);
 
         // 1. Update friend request status
@@ -306,11 +282,11 @@ export async function acceptFriendRequest(requestId, fromUserId, toUserId) {
             acceptedAt: serverTimestamp()
         });
 
-        // 2. Create direct chat
+        // 2. Create direct chat with EXACT schema matching your DB
         const chatRef = doc(collection(db, 'chats'));
         const chatData = {
             name: `${fromUserProfile.name} & ${toUserProfile.name}`,
-            type: 'direct',
+            type: 'direct',  // 🔥 EXACT: lowercase 'direct'
             isGroup: false,
             creatorId: toUserId,
             participants: [fromUserId, toUserId],
@@ -318,16 +294,16 @@ export async function acceptFriendRequest(requestId, fromUserId, toUserId) {
                 [fromUserId]: fromUserProfile.name,
                 [toUserId]: toUserProfile.name
             },
+            lastMessage: '',  // 🔥 NEW: For preview system
+            lastMessageSenderId: '',
             createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            lastActivity: serverTimestamp()
+            updatedAt: serverTimestamp()  // 🔥 EXACT: updatedAt (NOT lastActivity)
         };
         batch.set(chatRef, chatData);
 
-        // Commit the batch atomically
         await batch.commit();
 
-        console.log('✅ Friend request accepted and chat created atomically');
+        console.log('✅ [EMERGENCY] Friend request accepted, chat created');
 
         return {
             chatId: chatRef.id,
@@ -339,9 +315,6 @@ export async function acceptFriendRequest(requestId, fromUserId, toUserId) {
     }
 }
 
-/**
- * Reject a friend request
- */
 export async function rejectFriendRequest(requestId) {
     try {
         await updateDoc(doc(db, 'friend_requests', requestId), {
@@ -354,43 +327,7 @@ export async function rejectFriendRequest(requestId) {
     }
 }
 
-/**
- * Check if users are already friends (have an accepted request)
- */
-export async function areUsersFriends(userId1, userId2) {
-    try {
-        const query1 = query(
-            collection(db, 'friend_requests'),
-            where('fromUserId', '==', userId1),
-            where('toUserId', '==', userId2),
-            where('status', '==', 'accepted')
-        );
-
-        const query2 = query(
-            collection(db, 'friend_requests'),
-            where('fromUserId', '==', userId2),
-            where('toUserId', '==', userId1),
-            where('status', '==', 'accepted')
-        );
-
-        const [snapshot1, snapshot2] = await Promise.all([
-            getDocs(query1),
-            getDocs(query2)
-        ]);
-
-        return !snapshot1.empty || !snapshot2.empty;
-    } catch (error) {
-        console.error('Error checking friendship:', error);
-        return false;
-    }
-}
-
-/**
- * Subscribe to friend requests in real-time
- */
 export function subscribeToFriendRequests(userId, callback) {
-    console.log('🔍 [Friend Requests] Subscribing for userId:', userId);
-
     const requestsQuery = query(
         collection(db, 'friend_requests'),
         where('toUserId', '==', userId),
@@ -399,28 +336,11 @@ export function subscribeToFriendRequests(userId, callback) {
     );
 
     return onSnapshot(requestsQuery, async (snapshot) => {
-        console.log('📬 [Friend Requests] Snapshot received:', {
-            userId,
-            documentCount: snapshot.docs.length,
-            requestIds: snapshot.docs.map(d => d.id)
-        });
-
         const requests = [];
 
         for (const docSnap of snapshot.docs) {
             const requestData = docSnap.data();
-            console.log('📧 [Friend Request] Processing:', {
-                id: docSnap.id,
-                fromUserId: requestData.fromUserId,
-                toUserId: requestData.toUserId,
-                status: requestData.status
-            });
-
             const fromUser = await getUserProfile(requestData.fromUserId);
-
-            if (!fromUser) {
-                console.warn('⚠️ [Friend Request] Sender profile not found:', requestData.fromUserId);
-            }
 
             requests.push({
                 id: docSnap.id,
@@ -429,27 +349,28 @@ export function subscribeToFriendRequests(userId, callback) {
             });
         }
 
-        console.log('✅ [Friend Requests] Final list:', requests.length, 'requests');
         callback(requests);
     }, (error) => {
-        console.error('❌ [Friend Requests] Listener error:', error);
+        console.error('❌ Friend requests listener error:', error);
     });
 }
 
 /**
- * Subscribe to chats in real-time (with privacy filter)
+ * 🚨 CRITICAL FIX: Subscribe to chats using EXACT Firestore schema
+ * - Uses `updatedAt` field (NOT lastActivity)
+ * - Matches composite index: participants (array-contains) + updatedAt (descending)
  */
 export function subscribeToChats(userId, callback) {
-    console.log('💬 [Chats] Subscribing to chats for userId:', userId);
+    console.log('🔥 [EMERGENCY] subscribeToChats starting for user:', userId);
 
     const chatsQuery = query(
         collection(db, 'chats'),
         where('participants', 'array-contains', userId),
-        orderBy('updatedAt', 'desc')
+        orderBy('updatedAt', 'desc')  // 🔥 EXACT: updatedAt (NOT lastActivity)
     );
 
     return onSnapshot(chatsQuery, (snapshot) => {
-        console.log('💬 [Chats] Snapshot received:', {
+        console.log('✅ [EMERGENCY] Firestore snapshot received:', {
             userId,
             documentCount: snapshot.docs.length,
             chatIds: snapshot.docs.map(d => d.id)
@@ -457,13 +378,6 @@ export function subscribeToChats(userId, callback) {
 
         const chats = snapshot.docs.map(doc => {
             const data = doc.data();
-            console.log('💬 [Chat]', {
-                id: doc.id,
-                name: data.name,
-                type: data.type,
-                isGroup: data.isGroup,
-                participants: data.participants
-            });
             return {
                 id: doc.id,
                 ...data
@@ -472,12 +386,17 @@ export function subscribeToChats(userId, callback) {
 
         callback(chats);
     }, (error) => {
-        console.error('❌ [Chats] Listener error:', error);
+        console.error('❌ [EMERGENCY] Chats listener error:', error);
+        console.error('Error details:', {
+            code: error.code,
+            message: error.message,
+            stack: error.stack
+        });
     });
 }
 
 /**
- * Subscribe to messages for a specific chat (with privacy filter)
+ * Subscribe to messages for a specific chat
  */
 export function subscribeToMessages(chatId, userId, callback) {
     return onSnapshot(doc(db, 'chats', chatId), async (chatSnap) => {
@@ -488,7 +407,7 @@ export function subscribeToMessages(chatId, userId, callback) {
 
         const chatData = chatSnap.data();
         if (!chatData.participants?.includes(userId)) {
-            console.warn('Privacy Filter: User not authorized to view messages');
+            console.warn('Privacy Filter: User not authorized');
             callback([]);
             return;
         }
@@ -527,6 +446,7 @@ export function subscribeToMessages(chatId, userId, callback) {
                         feedback: msgData.analysisFeedback,
                         emoji: msgData.emoji
                     },
+                    isFlagged: msgData.isFlagged || false,  // 🔥 NEW: Pidgin detection
                     timestamp: msgData.createdAt?.toDate()
                 });
             }
@@ -538,37 +458,23 @@ export function subscribeToMessages(chatId, userId, callback) {
 
 // ====== FIREBASE STORAGE FUNCTIONS ======
 
-/**
- * Upload profile picture to Firebase Storage
- * @param {string} userId - User ID
- * @param {File} file - Image file to upload
- * @returns {Promise<string>} - Download URL of uploaded image
- */
 export async function uploadProfilePicture(userId, file) {
     try {
-        // Validate file type
         if (!file.type.startsWith('image/')) {
             throw new Error('File must be an image');
         }
 
-        // Validate file size (5MB max)
         const maxSize = 5 * 1024 * 1024;
         if (file.size > maxSize) {
             throw new Error('File size must be less than 5MB');
         }
 
-        // Create storage reference
         const fileExtension = file.name.split('.').pop();
         const fileName = `${userId}.${fileExtension}`;
         const storageRef = ref(storage, `avatars/${fileName}`);
 
-        // Upload file
         const snapshot = await uploadBytes(storageRef, file);
-        console.log('Upload successful:', snapshot);
-
-        // Get download URL
         const downloadURL = await getDownloadURL(snapshot.ref);
-        console.log('Download URL:', downloadURL);
 
         return downloadURL;
     } catch (error) {
@@ -579,11 +485,8 @@ export async function uploadProfilePicture(userId, file) {
 
 // ====== GROUP CHAT FUNCTIONS ======
 
-/**
- * Generate a unique 6-character invite code
- */
 function generateInviteCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed ambiguous chars
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
     for (let i = 0; i < 6; i++) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -592,21 +495,14 @@ function generateInviteCode() {
 }
 
 /**
- * Create a new group chat
- * @param {string} creatorId - User ID of the creator
- * @param {Object} groupData - Group information
- * @returns {Promise<Object>} - Created group with ID and invite code
+ * 🚨 EMERGENCY FIX: Create group with EXACT schema
  */
 export async function createGroupChat(creatorId, groupData) {
     try {
-        console.log('🏗️ [Group Chat] Creating group:', groupData.name);
-
-        // Generate unique invite code
         let inviteCode = generateInviteCode();
         let isUnique = false;
         let attempts = 0;
 
-        // Ensure invite code is unique
         while (!isUnique && attempts < 10) {
             const existingQuery = query(
                 collection(db, 'chats'),
@@ -627,34 +523,26 @@ export async function createGroupChat(creatorId, groupData) {
             throw new Error('Failed to generate unique invite code');
         }
 
-        // Use placeholder avatar if no profilePictureUrl provided or if it's empty
         const profilePictureUrl = groupData.profilePictureUrl ||
             `https://ui-avatars.com/api/?name=${encodeURIComponent(groupData.name)}&background=25a959&color=fff&size=200&bold=true`;
 
-        // Create group document
         const groupRef = await addDoc(collection(db, 'chats'), {
             name: groupData.name,
             description: groupData.description || '',
             profilePictureUrl,
-            type: 'group',
+            type: 'group',  // 🔥 EXACT: lowercase 'group'
             isGroup: true,
             creatorId,
-            participants: [creatorId], // Start with creator
-            members: [creatorId], // For explicit member tracking
-            admins: [creatorId], // Creator is admin
+            participants: [creatorId],
+            members: [creatorId],
+            admins: [creatorId],
             adminOnlyMessaging: groupData.adminOnlyMessaging || false,
             inviteCode,
             maxMembers: 500,
+            lastMessage: '',  // 🔥 NEW: For preview system
+            lastMessageSenderId: '',
             createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            lastActivity: serverTimestamp()
-        });
-
-        console.log('✅ [Group Chat] Group created:', {
-            id: groupRef.id,
-            inviteCode,
-            name: groupData.name,
-            profilePictureUrl
+            updatedAt: serverTimestamp()  // 🔥 EXACT: updatedAt (NOT lastActivity)
         });
 
         return {
@@ -664,22 +552,13 @@ export async function createGroupChat(creatorId, groupData) {
             ...groupData
         };
     } catch (error) {
-        console.error('❌ [Group Chat] Creation error:', error);
+        console.error('❌ Group creation error:', error);
         throw error;
     }
 }
 
-/**
- * Join a group using an invite code
- * @param {string} inviteCode - 6-character invite code
- * @param {string} userId - User ID joining the group
- * @returns {Promise<Object>} - Group information
- */
 export async function joinGroupByInviteCode(inviteCode, userId) {
     try {
-        console.log('🚪 [Group Chat] Joining with code:', inviteCode.toUpperCase());
-
-        // Find group by invite code
         const groupQuery = query(
             collection(db, 'chats'),
             where('inviteCode', '==', inviteCode.toUpperCase()),
@@ -697,9 +576,7 @@ export async function joinGroupByInviteCode(inviteCode, userId) {
         const groupData = groupDoc.data();
         const groupId = groupDoc.id;
 
-        // Check if already a member
         if (groupData.participants?.includes(userId)) {
-            console.log('ℹ️ [Group Chat] User already a member');
             return {
                 id: groupId,
                 ...groupData,
@@ -707,23 +584,15 @@ export async function joinGroupByInviteCode(inviteCode, userId) {
             };
         }
 
-        // Check member limit
         if (groupData.participants?.length >= (groupData.maxMembers || 500)) {
-            throw new Error('Group has reached maximum member limit (500)');
+            throw new Error('Group has reached maximum member limit');
         }
 
-        // Add user to group
         const groupRef = doc(db, 'chats', groupId);
         await updateDoc(groupRef, {
             participants: [...(groupData.participants || []), userId],
             members: [...(groupData.members || []), userId],
-            updatedAt: serverTimestamp()
-        });
-
-        console.log('✅ [Group Chat] User joined successfully:', {
-            groupId,
-            groupName: groupData.name,
-            userId
+            updatedAt: serverTimestamp()  // 🔥 EXACT: updatedAt
         });
 
         return {
@@ -732,16 +601,11 @@ export async function joinGroupByInviteCode(inviteCode, userId) {
             alreadyMember: false
         };
     } catch (error) {
-        console.error('❌ [Group Chat] Join error:', error);
+        console.error('❌ Join group error:', error);
         throw error;
     }
 }
 
-/**
- * Get group information by invite code
- * @param {string} inviteCode - 6-character invite code
- * @returns {Promise<Object>} - Group information (public data only)
- */
 export async function getGroupByInviteCode(inviteCode) {
     try {
         const groupQuery = query(
@@ -769,40 +633,38 @@ export async function getGroupByInviteCode(inviteCode) {
             maxMembers: groupData.maxMembers || 500
         };
     } catch (error) {
-        console.error('Error fetching group by invite code:', error);
+        console.error('Error fetching group:', error);
         throw error;
     }
 }
 
+// ====== MISSING FUNCTION FIX ======
+
 /**
- * Upload group profile picture
- * @param {string} groupId - Group ID
- * @param {File} file - Image file
- * @returns {Promise<string>} - Download URL
+ * Uploads a group profile picture to Firebase Storage
  */
-export async function uploadGroupPicture(groupId, file) {
+export async function uploadGroupPicture(chatId, file) {
     try {
         if (!file.type.startsWith('image/')) {
             throw new Error('File must be an image');
         }
 
-        const maxSize = 5 * 1024 * 1024;
-        if (file.size > maxSize) {
-            throw new Error('File size must be less than 5MB');
-        }
-
         const fileExtension = file.name.split('.').pop();
-        const fileName = `${groupId}.${fileExtension}`;
-        const storageRef = ref(storage, `groups/${fileName}`);
+        const fileName = `${chatId}_${Date.now()}.${fileExtension}`;
+        const storageRef = ref(storage, `group_avatars/${fileName}`);
 
         const snapshot = await uploadBytes(storageRef, file);
         const downloadURL = await getDownloadURL(snapshot.ref);
 
-        console.log('✅ [Group Chat] Profile picture uploaded:', downloadURL);
+        // Update the chat document with the new URL
+        await updateDoc(doc(db, 'chats', chatId), {
+            profilePictureUrl: downloadURL,
+            updatedAt: serverTimestamp()
+        });
 
         return downloadURL;
     } catch (error) {
-        console.error('❌ [Group Chat] Upload error:', error);
+        console.error('Error uploading group picture:', error);
         throw error;
     }
 }
