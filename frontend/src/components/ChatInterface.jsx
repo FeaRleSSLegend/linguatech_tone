@@ -275,6 +275,8 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
                                     }
                                     return activeChat.name.substring(0, 2).toUpperCase();
                                 })()}
+
+
                             </div>
                             <div>
                                 <h2 className="text-sm font-bold text-[#e0ddd9] flex items-center gap-2">
@@ -286,6 +288,16 @@ export default function ChatInterface({ onAnalysisUpdate, onBackToChats }) {
                                         }
                                         return activeChat.name;
                                     })()}
+
+                                    {activeChat.type === 'group' && (activeChat.creatorId === user?.id || user?.role === 'admin' || user?.role === 'super_admin') && (
+                                        <Link
+                                            to={`/admin/groups/${activeChat.id}`}
+                                            className="p-1 hover:bg-[#1e1e1e] rounded transition-colors text-[#958d73] hover:text-[var(--color-primary)] relative group hover:opacity-70"
+                                            title={`Group Analysis`}
+                                        >
+                                            <Shield className={`w-4 h-4 text-[#34a853]`} />
+                                        </Link>
+                                    )}
                                 </h2>
                                 <p className="text-[10px] text-[#958d73] flex items-center gap-1.5 uppercase tracking-wider font-semibold">
                                     {activeChat.type === 'direct' ? (
