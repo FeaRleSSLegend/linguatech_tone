@@ -21,6 +21,8 @@ const io = new Server(server, {
     }
 });
 
+// REMOVE THIS LINE: const express = require('express');
+
 const PORT = process.env.PORT || 3001;
 const ADMIN_SECRET = "ADMIN_SECRET_2026"; // In production, use env variables
 
