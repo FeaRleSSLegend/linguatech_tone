@@ -21,6 +21,8 @@ const io = new Server(server, {
     }
 });
 
+const express = require('express');
+
 const PORT = process.env.PORT || 3001;
 const ADMIN_SECRET = "ADMIN_SECRET_2026"; // In production, use env variables
 
@@ -549,3 +551,10 @@ app.post('/api/messages', async (req, res) => {
 server.listen(PORT, () => {
     console.log(`Tone Backend running on http://localhost:${PORT}`);
 });
+
+module.exports = app;
+
+// Keep your local listener for dev mode
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () => console.log('Server running locally'));
+}
